@@ -9,9 +9,18 @@ Authors@R:
 Description: What the package does (one paragraph).
 License: MIT + file LICENSE
 Imports: 
+    attempt,
     config,
+    DT,
+    glue,
     golem,
+    htmltools,
     shiny
 Encoding: UTF-8
 LazyData: true
 Config/roxygen2/version: 8.0.0
+Suggests: 
+    spelling,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Language: en-US
