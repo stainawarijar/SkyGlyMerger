@@ -9,8 +9,40 @@ app_ui <- function(request) {
     # Leave this function for adding external resources
     golem_add_external_resources(),
     # Your application UI logic
-    fluidPage(
-      golem::golem_welcome_page() # Remove this line to start building your UI
+    shinydashboardPlus::dashboardPage(
+      title = "SkyGlyMerger", skin = "purple",
+      header = shinydashboard::dashboardHeader(
+        title = "SkyGlyMerger"
+      ),
+      sidebar = shinydashboardPlus::dashboardSidebar(
+        shinydashboard::sidebarMenu(
+          id = "tabs",
+          shinydashboard::menuItem(
+            text = HTML("&nbspMerge data"),
+            tabName = "merge_data", icon = icon("file-import")
+          )
+        )
+      ),
+      body = shinydashboard::dashboardBody(
+        # Code to keep title and icons visible when collapsing the sidebar
+        tags$style(
+          '
+          @media (min-width: 768px){
+            .sidebar-mini.sidebar-collapse .main-header .logo {
+                width: 230px;
+            }
+            .sidebar-mini.sidebar-collapse .main-header .navbar {
+                margin-left: 230px;
+            }
+          }
+          '
+        ),
+        shinydashboard::tabItems(
+          shinydashboard::tabItem(
+            "merge_data", mod_merge_data_ui("merge_data_1")
+          )
+        )
+      )
     )
   )
 }

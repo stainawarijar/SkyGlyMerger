@@ -11,11 +11,16 @@ License: MIT + file LICENSE
 Imports: 
     attempt,
     config,
+    dplyr,
     DT,
     glue,
     golem,
     htmltools,
-    shiny
+    shiny,
+    shinydashboard,
+    shinydashboardPlus,
+    tidyr,
+    writexl
 Encoding: UTF-8
 LazyData: true
 Config/roxygen2/version: 8.0.0
