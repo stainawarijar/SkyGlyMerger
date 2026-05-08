@@ -19,6 +19,7 @@ Imports:
     shiny,
     shinydashboard,
     shinydashboardPlus,
+    shinyjs,
     tidyr,
     writexl
 Encoding: UTF-8

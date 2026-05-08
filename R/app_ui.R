@@ -24,6 +24,8 @@ app_ui <- function(request) {
         )
       ),
       body = shinydashboard::dashboardBody(
+        # Use `shinyjs` in all modules
+        shinyjs::useShinyjs(),
         # Code to keep title and icons visible when collapsing the sidebar
         tags$style(
           '
