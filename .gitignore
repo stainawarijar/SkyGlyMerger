@@ -14,4 +14,3 @@ renv/cellar/
 .vscode/
 .env
 .Renviron
-.Rprofile
