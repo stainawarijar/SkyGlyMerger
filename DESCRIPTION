@@ -1,5 +1,5 @@
 Package: SkyGlyMerger
-Title: An Amazing Shiny App
+Title: SkyGlyMerger
 Version: 0.0.0.9000
 Authors@R: 
     person(given = "Steinar",
