@@ -114,17 +114,6 @@ mod_merge_data_server <- function(id) {
     })
 
 
-    # Control status of "Merge data" button
-    observe({
-      shinyjs::toggleState(
-        id = "merge_data",
-        condition = all(
-          !is.null(input$skyline_file$datapath),
-          !is.null(input$glycounter_files$datapath)
-        )
-      )
-    })
-
     # Display merged data in table
     output$merged_data <- DT::renderDT({
       req(merged_data())
@@ -138,6 +127,40 @@ mod_merge_data_server <- function(id) {
         )
       )
     })
+
+    # Download data in xlsx format.
+    output$download_data <- downloadHandler(
+      filename = function() {
+        paste0(
+          format(Sys.Date(), "%Y%m%d"), "_", format(Sys.time(), "%H%M"),
+          "_merged_data.xlsx"
+        )
+      },
+      content = function(file) {
+        writexl::write_xlsx(merged_data(), path = file)
+      }
+    )
+
+
+    # Control status of buttons.
+    observe({
+      # Button for merging data
+      shinyjs::toggleState(
+        id = "merge_data",
+        condition = all(
+          !is.null(input$skyline_file$datapath),
+          !is.null(input$glycounter_files$datapath)
+        )
+      )
+      # Button for downloading data
+      shinyjs::toggleState("download_data", is_truthy(merged_data()))
+    })
+
+
+    return(list(
+      merged_data = merged_data,
+      mz_tolerance_ppm = reactive(input$mz_tolerance_ppm)
+    ))
   })
 }
 
