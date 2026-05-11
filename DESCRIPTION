@@ -2,11 +2,11 @@ Package: SkyGlyMerger
 Title: An Amazing Shiny App
 Version: 0.0.0.9000
 Authors@R: 
-    person(given = "firstname",
-           family = "lastname",
+    person(given = "Steinar",
+           family = "Gijze",
            role = c("aut", "cre"),
-           email = "your@email.com")
-Description: What the package does (one paragraph).
+           email = "s.gijze@lumc.nl")
+Description: Merges Skyline data with GlyCounter data.
 License: MIT + file LICENSE
 Imports: 
     attempt,
