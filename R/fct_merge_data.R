@@ -182,7 +182,8 @@ extract_fragment_cols <- function(glycounter_data) {
 
 
 # TODO: documentation
-prepare_skyline_data <- function(skyline_data, ppm_tolerance = 10) {
+prepare_skyline_data <- function(skyline_data,
+                                 ppm_tolerance = 10) {
   skyline_data |>
     dplyr::mutate(
       # Add a stable row identifier so GlyCounter summaries can be calculated
@@ -203,7 +204,8 @@ prepare_skyline_data <- function(skyline_data, ppm_tolerance = 10) {
 
 
 # TODO: documentation
-extract_glycounter_candidates <- function(skyline_prepped, glycounter_data) {
+extract_glycounter_candidates <- function(skyline_prepped,
+                                          glycounter_data) {
   # Match GlyCounter scans to Skyline rows by sample, precursor m/z window and
   # retention time window. Treat Skyline identifiers such as Protein.Name as
   # regular analyte labels, so a single GlyCounter scan may match multiple
@@ -239,13 +241,13 @@ extract_glycounter_candidates <- function(skyline_prepped, glycounter_data) {
 
 
 # TODO: documentation
-
 summarize_glycounter_data <- function(glycounter_candidates,
-                                      fragment_cols) {
+                                      fragment_cols,
+                                      relative_abundances = TRUE) {
   # Aggregate the scan-level GlyCounter data to one summary per Skyline row.
   # This is where repeated fragmentation events are collapsed into one total
   # signal profile for each sample/analyte combination.
-  glycounter_candidates |>
+  summary <- glycounter_candidates |>
     dplyr::group_by(skyline_row_id) |>
     dplyr::summarize(
       # Number of GlyCounter scans contributing to this Skyline row.
@@ -273,6 +275,17 @@ summarize_glycounter_data <- function(glycounter_candidates,
       dplyr::across(dplyr::all_of(fragment_cols), ~ sum(.x, na.rm = TRUE)),
       .groups = "drop"
     )
+
+  # Optional: report relative abundances for fragments.
+  # For now this is always done, but could be made optional if requested.
+  if (relative_abundances) {
+    summary <- summary |>
+      dplyr::mutate(
+        dplyr::across(dplyr::all_of(fragment_cols), ~ .x / fragment_sum * 100)
+      )
+  }
+
+  return(summary)
 }
 
 
@@ -291,11 +304,4 @@ merge_data <- function(skyline_prepped, glycounter_summary) {
       -mz_max
     )
 }
-
-
-
-
-
-
-
 
