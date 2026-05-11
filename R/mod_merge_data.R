@@ -118,7 +118,9 @@ mod_merge_data_server <- function(id) {
     output$merged_data <- DT::renderDT({
       req(merged_data())
       DT::datatable(
-        data = merged_data(),
+        # Round numbers to two decimals when displaying data.
+        data = merged_data() |>
+          dplyr::mutate_if(is.numeric, ~format(round(., 2), nsmall = 2)),
         filter = "top",
         options = list(
           scrollX = TRUE,
