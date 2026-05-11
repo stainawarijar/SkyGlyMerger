@@ -20,7 +20,9 @@ Imports:
     shinydashboard,
     shinydashboardPlus,
     shinyjs,
+    stringr,
     tidyr,
+    tidyselect,
     writexl
 Encoding: UTF-8
 LazyData: true

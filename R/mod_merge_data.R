@@ -71,21 +71,41 @@ mod_merge_data_server <- function(id) {
 
     skyline_data <- reactive({
       req(input$skyline_file$datapath)
-      FALSE  # Call function here
-    }) |> bindEvent("merge_data")
+      load_skyline_data(input$skyline_file$datapath)
+    }) |> bindEvent(input$merge_data)
 
     glycounter_data <- reactive({
       req(input$glycounter_files$datapath)
-      FALSE  # Call function here
-    }) |> bindEvent("merge_data")
+      # Extract filenames of OxoSignal files (original and in memory)
+      original_names <- input$glycounter_files$name
+      oxosignal_indices <- grepl("_OxoSignal\\.txt$", original_names)
+      oxosignal_files <- input$glycounter_files$datapath[oxosignal_indices]
+      oxosignal_names <- original_names[oxosignal_indices]
+      # Process the OxoSignal files
+      # TODO: Check against zero OxoSignal files.
+      # TODO: Allow for uploading zip file.
+      load_glycounter_data(
+        setNames(as.list(oxosignal_files), oxosignal_names)
+      )
+    }) |> bindEvent(input$merge_data)
 
     merged_data <- reactive({
       req(skyline_data(), glycounter_data())
+      browser()
       FALSE  # Call function here
-    }) |> bindEvent("merge_data")
+    })
+
 
     # Control status of "Merge data" button
-    shinyjs::toggleState("merge_data", is_truthy(merged_data()))
+    observe({
+      shinyjs::toggleState(
+        id = "merge_data",
+        condition = all(
+          !is.null(input$skyline_file$datapath),
+          !is.null(input$glycounter_files$datapath)
+        )
+      )
+    })
 
     # Display merged data in table
     output$merged_data <- DT::renderDT({
