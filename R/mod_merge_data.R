@@ -36,6 +36,14 @@ mod_merge_data_ui <- function(id) {
             accept = ".txt",
             multiple = TRUE
           ),
+          numericInput(
+            ns("mz_tolerance_ppm"),
+            HTML(
+              "Tolerance around theoretical <i>m/z</i> values (ppm)
+              in Skyline data"
+            ),
+            value = 10, min = 1, step = 1
+          ),
           actionButton(ns("merge_data"), "Merge data")
         ),
         # Box for displaying and downloading the data
@@ -52,6 +60,7 @@ mod_merge_data_ui <- function(id) {
             ns("download_data"),
             HTML("Download <i>xlsx</i> file")
           ),
+          br(),
           br(),
           DT::dataTableOutput(ns("merged_data"))
         )
@@ -91,8 +100,17 @@ mod_merge_data_server <- function(id) {
 
     merged_data <- reactive({
       req(skyline_data(), glycounter_data())
-      browser()
-      FALSE  # Call function here
+      fragment_cols <- extract_fragment_cols(glycounter_data())
+      skyline_prepped <- prepare_skyline_data(
+        skyline_data(), input$mz_tolerance_ppm
+      )
+      glycounter_candidates <- extract_glycounter_candidates(
+        skyline_prepped, glycounter_data()
+      )
+      glycounter_summary <- summarize_glycounter_data(
+        glycounter_candidates, fragment_cols
+      )
+      merge_data(skyline_prepped, glycounter_summary)
     })
 
 
@@ -115,7 +133,7 @@ mod_merge_data_server <- function(id) {
         filter = "top",
         options = list(
           scrollX = TRUE,
-          pageLength = 6,
+          pageLength = 10,
           columnDefs = list(list(className = "dt-center", targets = "_all"))
         )
       )

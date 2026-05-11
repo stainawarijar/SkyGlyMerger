@@ -94,9 +94,11 @@ transform_skyline_data <- function(data_renamed) {
           as.numeric()
       )
     ) |>
-    tidyr::pivot_longer(tidyr::all_of(variable_cols), names_to = "sample_variable") |>
+    tidyr::pivot_longer(
+      tidyr::all_of(variable_cols), names_to = "sample_variable"
+    ) |>
     tidyr::extract(
-      # Split the original Skyline column name into sample ID and measurement type
+      # Split original Skyline column name into sample ID and measurement type
       col   = sample_variable,
       into  = c("sample", "variable"),
       regex = paste0(
@@ -169,4 +171,131 @@ load_glycounter_data <- function(files) {
       dplyr::relocate(fragment_sum, .after = DissociationType)
   })
 }
+
+
+# TODO: documentation
+extract_fragment_cols <- function(glycounter_data) {
+  names <- colnames(glycounter_data)
+  fragment_cols <- names[stringr::str_detect(names, "^\\d+\\.\\d+,\\s")]
+  return(fragment_cols)
+}
+
+
+# TODO: documentation
+prepare_skyline_data <- function(skyline_data, ppm_tolerance = 10) {
+  skyline_data |>
+    dplyr::mutate(
+      # Add a stable row identifier so GlyCounter summaries can be calculated
+      # per Skyline row and safely joined back afterwards.
+      skyline_row_id = dplyr::row_number(),
+      # Skyline stores precursor m/z together with the adduct annotation,
+      # for example "637.2318[M+2H]". Extract only the numeric m/z value.
+      precursor_mz_theoretical = Precursor |>
+        stringr::str_remove("\\[.*") |>
+        as.numeric(),
+      # Convert the theoretical precursor m/z to a matching window using
+      # the ppm tolerance around the Skyline value.
+      mz_min = precursor_mz_theoretical * (1 - ppm_tolerance * 1e-6),
+      mz_max = precursor_mz_theoretical * (1 + ppm_tolerance * 1e-6),
+      .after = `Precursor.Charge`
+    )
+}
+
+
+# TODO: documentation
+extract_glycounter_candidates <- function(skyline_prepped, glycounter_data) {
+  # Match GlyCounter scans to Skyline rows by sample, precursor m/z window and
+  # retention time window. Treat Skyline identifiers such as Protein.Name as
+  # regular analyte labels, so a single GlyCounter scan may match multiple
+  # Skyline rows if their analyte definitions overlap.
+  skyline_prepped |>
+    dplyr::select(
+      skyline_row_id,
+      sample,
+      `Best.Retention.Time`,
+      Min.Start.Time,
+      Max.End.Time,
+      precursor_mz_theoretical,
+      mz_min,
+      mz_max
+    ) |>
+    # Join broadly by sample first, then keep only the row pairs that satisfy
+    # the m/z and retention time constraints.
+    dplyr::left_join(
+      glycounter_data, by = "sample", relationship = "many-to-many"
+    ) |>
+    dplyr::filter(
+      dplyr::between(PrecursorMZ, mz_min, mz_max),
+      dplyr::between(RetentionTime, Min.Start.Time, Max.End.Time)
+    ) |>
+    dplyr::mutate(
+      # Keep the precursor m/z error as a useful QC metric for the match.
+      glycounter_mz_error_ppm = (
+        1e6 * abs(PrecursorMZ - precursor_mz_theoretical) /
+          precursor_mz_theoretical
+      )
+    )
+}
+
+
+# TODO: documentation
+
+summarize_glycounter_data <- function(glycounter_candidates,
+                                      fragment_cols) {
+  # Aggregate the scan-level GlyCounter data to one summary per Skyline row.
+  # This is where repeated fragmentation events are collapsed into one total
+  # signal profile for each sample/analyte combination.
+  glycounter_candidates |>
+    dplyr::group_by(skyline_row_id) |>
+    dplyr::summarize(
+      # Number of GlyCounter scans contributing to this Skyline row.
+      glycounter_scan_count = dplyr::n(),
+      # Keep contributing scan numbers for traceability.
+      glycounter_scan_numbers = stringr::str_c(
+        sort(unique(ScanNumber)), collapse = ";"
+      ),
+      # DissociationType can vary across contributing scans.
+      glycounter_dissociation_types = stringr::str_c(
+        sort(unique(DissociationType)), collapse = ";"
+      ),
+      # Count how many contributing scans were flagged as likely glyco spectra.
+      glycounter_likely_glyco_count = sum(LikelyGlycoSpectrum, na.rm = TRUE),
+      # Summaries of matched retention times and precursor m/z values.
+      glycounter_retention_time_mean = mean(RetentionTime, na.rm = TRUE),
+      glycounter_retention_time_min = min(RetentionTime, na.rm = TRUE),
+      glycounter_retention_time_max = max(RetentionTime, na.rm = TRUE),
+      glycounter_precursor_mz_mean = mean(PrecursorMZ, na.rm = TRUE),
+      glycounter_mz_error_ppm_mean = mean(glycounter_mz_error_ppm, na.rm = TRUE),
+      # Sum total fragment signal across all matched scans.
+      fragment_sum = sum(fragment_sum, na.rm = TRUE),
+      # Sum every individual fragment-ion column across matched scans so each
+      # Skyline row ends up with one total intensity per fragment ion.
+      dplyr::across(dplyr::all_of(fragment_cols), ~ sum(.x, na.rm = TRUE)),
+      .groups = "drop"
+    )
+}
+
+
+# TODO: documentation
+merge_data <- function(skyline_prepped, glycounter_summary) {
+  # Add the GlyCounter summaries back to the full Skyline table.
+  # Because this is a left join starting from Skyline, the number of rows
+  # remains identical to the original Skyline analyte-sample table.
+  skyline_prepped |>
+    dplyr::left_join(glycounter_summary, by = "skyline_row_id") |>
+    # Remove helper columns only needed for matching.
+    dplyr::select(
+      -skyline_row_id,
+      -precursor_mz_theoretical,
+      -mz_min,
+      -mz_max
+    )
+}
+
+
+
+
+
+
+
 
