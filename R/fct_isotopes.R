@@ -238,7 +238,7 @@ calculate_fine_structure <- function(
   mass_correction <- as.integer(charge) * ELECTRON_MASS
 
   for (i in seq_along(molecular_pattern)) {
-    molecular_pattern[[i]]$mass <- molecular_pattern[[i]]$mass + mass_correction
+    molecular_pattern[[i]]$mass <- molecular_pattern[[i]]$mass - mass_correction
   }
 
   # Sort final fine-structure peaks by mass.
