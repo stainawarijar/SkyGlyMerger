@@ -5,7 +5,8 @@
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-The goal of SkyGlyMerger is to merge SKyline data with GlyCounter data...
+SkyGlyMerger is an R Shiny app for merging Skyline data with GlyCounter data.
+Once this is working properly, this feature will be implemented in [GlycoDash](https://github.com/Center-for-Proteomics-and-Metabolomics/GlycoDash).
 
 
 ## Installation
