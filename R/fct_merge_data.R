@@ -1,4 +1,5 @@
 # This file contains functions used in the module `mod_merge_data.R`
+# It also calls functions in `fct_isotopes.R`
 
 
 # TODO: documentation
@@ -182,8 +183,10 @@ extract_fragment_cols <- function(glycounter_data) {
 
 
 # TODO: documentation
-prepare_skyline_data <- function(skyline_data,
-                                 ppm_tolerance = 10) {
+prepare_skyline_data <- function(
+    skyline_data,
+    ppm_tolerance = 10
+  ) {
   skyline_data |>
     dplyr::mutate(
       # Add a stable row identifier so GlyCounter summaries can be calculated
@@ -204,8 +207,12 @@ prepare_skyline_data <- function(skyline_data,
 
 
 # TODO: documentation
-extract_glycounter_candidates <- function(skyline_prepped,
-                                          glycounter_data) {
+# TODO: Fix matching based on m/z: Skyline m/z values are monoisotopic,
+# but GlyCounter m/z values are (in general) not for the monoisotopic peak.
+extract_glycounter_candidates <- function(
+    skyline_prepped,
+    glycounter_data
+  ) {
   # Match GlyCounter scans to Skyline rows by sample, precursor m/z window and
   # retention time window. Treat Skyline identifiers such as Protein.Name as
   # regular analyte labels, so a single GlyCounter scan may match multiple
@@ -241,9 +248,11 @@ extract_glycounter_candidates <- function(skyline_prepped,
 
 
 # TODO: documentation
-summarize_glycounter_data <- function(glycounter_candidates,
-                                      fragment_cols,
-                                      relative_abundances = TRUE) {
+summarize_glycounter_data <- function(
+    glycounter_candidates,
+    fragment_cols,
+    relative_abundances = TRUE
+  ) {
   # Aggregate the scan-level GlyCounter data to one summary per Skyline row.
   # This is where repeated fragmentation events are collapsed into one total
   # signal profile for each sample/analyte combination.
@@ -290,7 +299,10 @@ summarize_glycounter_data <- function(glycounter_candidates,
 
 
 # TODO: documentation
-merge_data <- function(skyline_prepped, glycounter_summary) {
+merge_data <- function(
+    skyline_prepped,
+    glycounter_summary
+  ) {
   # Add the GlyCounter summaries back to the full Skyline table.
   # Because this is a left join starting from Skyline, the number of rows
   # remains identical to the original Skyline analyte-sample table.
