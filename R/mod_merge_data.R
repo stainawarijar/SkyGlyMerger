@@ -83,6 +83,19 @@ mod_merge_data_server <- function(id) {
       load_skyline_data(input$skyline_file$datapath)
     }) |> bindEvent(input$merge_data)
 
+    skyline_isotopic_patterns <- reactive({
+      req(skyline_data())
+      calculate_skyline_isotopic_patterns(skyline_data())
+    })
+
+    skyline_top_mz <- reactive({
+      req(skyline_isotopic_patterns())
+      extract_top_isotopic_mz(
+        isotopic_patterns = skyline_isotopic_patterns(),
+        n_peaks = 3
+      )
+    })
+
     glycounter_data <- reactive({
       req(input$glycounter_files$datapath)
       # Extract filenames of OxoSignal files (original and in memory)
@@ -98,6 +111,8 @@ mod_merge_data_server <- function(id) {
       )
     }) |> bindEvent(input$merge_data)
 
+
+    # TODO: m/z matching based on correct values.
     merged_data <- reactive({
       req(skyline_data(), glycounter_data())
       fragment_cols <- extract_fragment_cols(glycounter_data())

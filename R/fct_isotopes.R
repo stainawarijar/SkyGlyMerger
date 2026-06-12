@@ -273,8 +273,6 @@ calculate_fine_structure <- function(
 # Collapse fine structure to nominal pattern.
 collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 
-  extra_neutrons_lookup <- build_extra_neutron_lookup(ISOTOPES)
-
   grouped_pattern <- list()
 
   for (peak in fine_structure_pattern) {
@@ -283,7 +281,7 @@ collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 
     for (isotope_label in names(peak$isotope_counts)) {
       isotope_count <- peak$isotope_counts[[isotope_label]]
-      isotope_extra_neutrons <- extra_neutrons_lookup[[isotope_label]]
+      isotope_extra_neutrons <- EXTRA_NEUTRON_LOOKUP[[isotope_label]]
 
       extra_neutrons <- extra_neutrons +
         isotope_count * isotope_extra_neutrons

@@ -135,6 +135,84 @@ load_skyline_data <- function(file_path) {
 
 
 # TODO: documentation
+calculate_skyline_isotopic_patterns <- function(
+    skyline_data,
+    molecular_formula_col = "Molecule.Formula",
+    charge_col = "Precursor.Charge",
+    charge_carrier = "H"  # Fix for now
+  ) {
+
+  # Extract unique composition + charge combinations
+  compositions <- skyline_data |>
+    dplyr::select(dplyr::all_of(c(molecular_formula_col, charge_col))) |>
+    dplyr::distinct() |>
+    # Ensure charge is integer.
+    dplyr::mutate(dplyr::across(dplyr::all_of(charge_col), as.integer))
+
+  # Get nominal isotopic pattern(M, M+1, M+2, ...) for each ion
+  patterns <- list()
+  for (i in seq_len(nrow(compositions))) {
+    formula <- compositions[[molecular_formula_col]][[i]]
+    charge <- compositions[[charge_col]][[i]]
+    charge_name <- as.character(charge)
+
+    fine_structure_pattern <- calculate_ion_fine_structure(
+      formula = formula, charge = charge, carrier = charge_carrier
+    )
+
+    nominal_pattern <- collapse_to_nominal_pattern(fine_structure_pattern)
+
+    patterns[[formula]][[charge_name]] <- nominal_pattern
+  }
+
+  return(patterns)
+}
+
+
+
+extract_top_isotopic_mz <- function(
+    isotopic_patterns,
+    n_peaks = 3,
+    molecular_formula_col = "Molecule.Formula",
+    charge_col = "Precursor.Charge"
+  ) {
+  purrr::imap_dfr(
+    isotopic_patterns, function(charge_list, formula) {
+      purrr::imap_dfr(
+        charge_list, function(peak_list, charge) {
+
+          charge_int <- as.integer(charge)
+
+          peak_df <- purrr::map_dfr(peak_list, tibble::as_tibble)
+
+          peak_df |>
+            dplyr::arrange(dplyr::desc(prob)) |>
+            dplyr::slice_head(n = n_peaks) |>
+            dplyr::mutate(
+              rank = dplyr::row_number(),
+              !!molecular_formula_col := formula,
+              !!charge_col := charge_int,
+              # For negative charges, m/z is still reported as positive value
+              mz = abs(mass / charge_int)
+            ) |>
+            dplyr::select(
+              dplyr::all_of(c(molecular_formula_col, charge_col)),
+              rank,
+              mz
+            )
+        }
+      )
+    }
+  ) |>
+    tidyr::pivot_wider(
+      names_from = rank, values_from = mz,
+      names_prefix = "mz_prob"
+    )
+}
+
+
+
+# TODO: documentation
 # `files`: named list containing original filenames (names) and those stored
 # in memory (values)
 load_glycounter_data <- function(files) {
