@@ -14,7 +14,10 @@ read_skyline_csv <- function(file_path) {
 
 
 # TODO: documentation
-rename_skyline_isomers <- function(data_raw) {
+rename_skyline_isomers <- function(
+    data_raw
+    # TODO Adjustable column names for Protein Name, Charge etc
+  ) {
   # Look for isomers in the glycan compositions
   data <- data_raw |>
     dplyr::group_by(
@@ -63,6 +66,7 @@ rename_skyline_isomers <- function(data_raw) {
 
 
 # TODO: documentation
+# TODO: Adjustable column names for Precursor.Charge etc...
 transform_skyline_data <- function(data_renamed) {
   # Assume variable columns for samples start after `Precursor.Charge`
   # Everything after that point belongs to one sample-variable combination such
@@ -170,6 +174,7 @@ calculate_skyline_isotopic_patterns <- function(
 
 
 
+# TODO: Documentation
 extract_top_isotopic_mz <- function(
     isotopic_patterns,
     n_peaks = 3,
@@ -207,6 +212,87 @@ extract_top_isotopic_mz <- function(
     tidyr::pivot_wider(
       names_from = rank, values_from = mz,
       names_prefix = "mz_prob"
+    )
+}
+
+
+
+# TODO: Documentation
+extract_isotopic_mz_candidates <- function(
+    isotopic_patterns,
+    n_peaks = 3,
+    min_relative_prob = NULL,
+    molecular_formula_col = "Molecule.Formula",
+    charge_col = "Precursor.Charge"
+  ) {
+
+  candidates <- purrr::imap_dfr(
+    isotopic_patterns, function(charge_list, formula) {
+      purrr::imap_dfr(
+        charge_list, function(peak_list, charge) {
+
+          charge_int <- as.integer(charge)
+
+          peak_df <- purrr::map_dfr(peak_list, tibble::as_tibble)
+
+          peak_df |>
+            dplyr::arrange(dplyr::desc(prob)) |>
+            dplyr::mutate(
+              isotope_rank = dplyr::row_number(),
+              !!molecular_formula_col := formula,
+              !!charge_col := charge_int,
+              isotope_mz = abs(mass / charge_int),
+              isotope_prob = prob,
+              isotope_prob_relative = prob_relative
+            ) |>
+            dplyr::select(
+              dplyr::all_of(c(molecular_formula_col, charge_col)),
+              isotope_rank,
+              isotope_group,
+              extra_neutrons,
+              isotope_mz,
+              isotope_prob,
+              isotope_prob_relative,
+              n_fine_structure_peaks
+            )
+        }
+      )
+    }
+  )
+
+  if (!is.null(min_relative_prob)) {
+    candidates <- candidates |>
+      dplyr::filter(isotope_prob_relative >= min_relative_prob)
+  }
+
+  slice <- candidates |>
+    dplyr::group_by(
+      dplyr::across(dplyr::all_of(c(molecular_formula_col, charge_col)))
+    ) |>
+    dplyr::slice_head(n = n_peaks) |>
+    dplyr::ungroup()
+
+  return(slice)
+}
+
+
+
+# TODO: Documentation
+expand_skyline_isotope_candidates <- function(
+    skyline_prepped,
+    isotope_mz_candidates,
+    molecular_formula_col = "Molecule.Formula",
+    charge_col = "Precursor.Charge"
+) {
+  skyline_prepped |>
+    dplyr::left_join(
+      isotope_mz_candidates,
+      by = c(molecular_formula_col, charge_col),
+      relationship = "many-to-many"
+    ) |>
+    dplyr::mutate(
+      isotope_mz_min = isotope_mz * (1 - ppm_tolerance * 1e-6),
+      isotope_mz_max = isotope_mz * (1 + ppm_tolerance * 1e-6)
     )
 }
 
@@ -263,66 +349,66 @@ extract_fragment_cols <- function(glycounter_data) {
 # TODO: documentation
 prepare_skyline_data <- function(
     skyline_data,
-    ppm_tolerance = 10
+    ppm_tolerance = 10,
+    charge_col = "Precursor.Charge"
   ) {
   skyline_data |>
     dplyr::mutate(
       # Add a stable row identifier so GlyCounter summaries can be calculated
       # per Skyline row and safely joined back afterwards.
       skyline_row_id = dplyr::row_number(),
-      # Skyline stores precursor m/z together with the adduct annotation,
-      # for example "637.2318[M+2H]". Extract only the numeric m/z value.
-      precursor_mz_theoretical = Precursor |>
-        stringr::str_remove("\\[.*") |>
-        as.numeric(),
-      # Convert the theoretical precursor m/z to a matching window using
-      # the ppm tolerance around the Skyline value.
-      mz_min = precursor_mz_theoretical * (1 - ppm_tolerance * 1e-6),
-      mz_max = precursor_mz_theoretical * (1 + ppm_tolerance * 1e-6),
-      .after = `Precursor.Charge`
+      # Add ppm tolerance, and charge as integer
+      ppm_tolerance = ppm_tolerance,
+      `Precursor.Charge` = as.integer(.data[["Precursor.Charge"]])  # TODO: adjustable colname
     )
 }
 
 
+
 # TODO: documentation
-# TODO: Fix matching based on m/z: Skyline m/z values are monoisotopic,
-# but GlyCounter m/z values are (in general) not for the monoisotopic peak.
 extract_glycounter_candidates <- function(
-    skyline_prepped,
+    skyline_isotope_candidates,
     glycounter_data
-  ) {
-  # Match GlyCounter scans to Skyline rows by sample, precursor m/z window and
-  # retention time window. Treat Skyline identifiers such as Protein.Name as
-  # regular analyte labels, so a single GlyCounter scan may match multiple
-  # Skyline rows if their analyte definitions overlap.
-  skyline_prepped |>
+) {
+  skyline_isotope_candidates |>
     dplyr::select(
       skyline_row_id,
       sample,
       `Best.Retention.Time`,
       Min.Start.Time,
       Max.End.Time,
-      precursor_mz_theoretical,
-      mz_min,
-      mz_max
+      isotope_rank,
+      isotope_group,
+      extra_neutrons,
+      isotope_mz,
+      isotope_prob,
+      isotope_prob_relative,
+      isotope_mz_min,
+      isotope_mz_max
     ) |>
-    # Join broadly by sample first, then keep only the row pairs that satisfy
-    # the m/z and retention time constraints.
     dplyr::left_join(
-      glycounter_data, by = "sample", relationship = "many-to-many"
+      glycounter_data,
+      by = "sample",
+      relationship = "many-to-many"
     ) |>
     dplyr::filter(
-      dplyr::between(PrecursorMZ, mz_min, mz_max),
+      dplyr::between(PrecursorMZ, isotope_mz_min, isotope_mz_max),
       dplyr::between(RetentionTime, Min.Start.Time, Max.End.Time)
     ) |>
     dplyr::mutate(
-      # Keep the precursor m/z error as a useful QC metric for the match.
       glycounter_mz_error_ppm = (
-        1e6 * abs(PrecursorMZ - precursor_mz_theoretical) /
-          precursor_mz_theoretical
+        1e6 * abs(PrecursorMZ - isotope_mz) / isotope_mz
       )
-    )
+    ) |>
+    dplyr::group_by(skyline_row_id, sample, ScanNumber) |>
+    dplyr::slice_min(
+      order_by = glycounter_mz_error_ppm,
+      n = 1,
+      with_ties = FALSE
+    ) |>
+    dplyr::ungroup()
 }
+
 
 
 # TODO: documentation
@@ -330,50 +416,90 @@ summarize_glycounter_data <- function(
     glycounter_candidates,
     fragment_cols,
     relative_abundances = TRUE
-  ) {
+) {
   # Aggregate the scan-level GlyCounter data to one summary per Skyline row.
   # This is where repeated fragmentation events are collapsed into one total
   # signal profile for each sample/analyte combination.
+  #
+  # Note: GlyCounter precursor m/z values may match M, M+1, M+2, etc. rather
+  # than only the monoisotopic precursor m/z. Therefore, isotope-match metadata
+  # is retained here for traceability.
   summary <- glycounter_candidates |>
     dplyr::group_by(skyline_row_id) |>
     dplyr::summarize(
       # Number of GlyCounter scans contributing to this Skyline row.
       glycounter_scan_count = dplyr::n(),
+
       # Keep contributing scan numbers for traceability.
       glycounter_scan_numbers = stringr::str_c(
         sort(unique(ScanNumber)), collapse = ";"
       ),
+
       # DissociationType can vary across contributing scans.
       glycounter_dissociation_types = stringr::str_c(
         sort(unique(DissociationType)), collapse = ";"
       ),
+
+      # Keep track of which isotope-envelope peaks were matched.
+      # These can be M, M+1, M+2, etc.
+      glycounter_matched_isotope_groups = stringr::str_c(
+        sort(unique(isotope_group)), collapse = ";"
+      ),
+
+      # Keep track of the probability ranks of the matched isotope peaks.
+      # Rank 1 is the most probable isotope peak for that molecular formula
+      # and charge state, not necessarily the monoisotopic peak.
+      glycounter_matched_isotope_ranks = stringr::str_c(
+        sort(unique(isotope_rank)), collapse = ";"
+      ),
+
       # Count how many contributing scans were flagged as likely glyco spectra.
       glycounter_likely_glyco_count = sum(LikelyGlycoSpectrum, na.rm = TRUE),
-      # Summaries of matched retention times and precursor m/z values.
+
+      # Summaries of matched retention times.
       glycounter_retention_time_mean = mean(RetentionTime, na.rm = TRUE),
       glycounter_retention_time_min = min(RetentionTime, na.rm = TRUE),
       glycounter_retention_time_max = max(RetentionTime, na.rm = TRUE),
+
+      # Summaries of observed GlyCounter precursor m/z values.
       glycounter_precursor_mz_mean = mean(PrecursorMZ, na.rm = TRUE),
+
+      # Summaries of the theoretical isotope m/z values that were matched.
+      # These are candidate isotope-envelope m/z values, not necessarily
+      # monoisotopic m/z values.
+      glycounter_matched_isotope_mz_mean = mean(isotope_mz, na.rm = TRUE),
+
+      # Precursor m/z error is calculated relative to the matched isotope m/z,
+      # not relative to the Skyline monoisotopic m/z.
       glycounter_mz_error_ppm_mean = mean(glycounter_mz_error_ppm, na.rm = TRUE),
+      glycounter_mz_error_ppm_min = min(glycounter_mz_error_ppm, na.rm = TRUE),
+
       # Sum total fragment signal across all matched scans.
       fragment_sum = sum(fragment_sum, na.rm = TRUE),
+
       # Sum every individual fragment-ion column across matched scans so each
       # Skyline row ends up with one total intensity per fragment ion.
       dplyr::across(dplyr::all_of(fragment_cols), ~ sum(.x, na.rm = TRUE)),
+
       .groups = "drop"
     )
 
   # Optional: report relative abundances for fragments.
-  # For now this is always done, but could be made optional if requested.
+  # This converts each fragment-ion intensity to a percentage of the total
+  # fragment signal for that Skyline row.
   if (relative_abundances) {
     summary <- summary |>
       dplyr::mutate(
-        dplyr::across(dplyr::all_of(fragment_cols), ~ .x / fragment_sum * 100)
+        dplyr::across(
+          dplyr::all_of(fragment_cols),
+          ~ dplyr::if_else(fragment_sum > 0, .x / fragment_sum * 100, NA_real_)
+        )
       )
   }
 
   return(summary)
 }
+
 
 
 # TODO: documentation
@@ -387,11 +513,6 @@ merge_data <- function(
   skyline_prepped |>
     dplyr::left_join(glycounter_summary, by = "skyline_row_id") |>
     # Remove helper columns only needed for matching.
-    dplyr::select(
-      -skyline_row_id,
-      -precursor_mz_theoretical,
-      -mz_min,
-      -mz_max
-    )
+    dplyr::select(-skyline_row_id, -ppm_tolerance)
 }
 

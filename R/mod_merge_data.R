@@ -83,18 +83,20 @@ mod_merge_data_server <- function(id) {
       load_skyline_data(input$skyline_file$datapath)
     }) |> bindEvent(input$merge_data)
 
-    skyline_isotopic_patterns <- reactive({
+    isotopic_patterns <- reactive({
       req(skyline_data())
       calculate_skyline_isotopic_patterns(skyline_data())
     })
 
-    skyline_top_mz <- reactive({
-      req(skyline_isotopic_patterns())
-      extract_top_isotopic_mz(
-        isotopic_patterns = skyline_isotopic_patterns(),
-        n_peaks = 3
+    isotope_mz_candidates <- reactive({
+      req(isotopic_patterns())
+      extract_isotopic_mz_candidates(
+        isotopic_patterns = isotopic_patterns(),
+        n_peaks = 3,
+        min_relative_prob = 0.05
       )
     })
+
 
     glycounter_data <- reactive({
       req(input$glycounter_files$datapath)
@@ -112,19 +114,30 @@ mod_merge_data_server <- function(id) {
     }) |> bindEvent(input$merge_data)
 
 
-    # TODO: m/z matching based on correct values.
+
     merged_data <- reactive({
-      req(skyline_data(), glycounter_data())
+      req(skyline_data(), isotope_mz_candidates(), glycounter_data())
+      browser()
       fragment_cols <- extract_fragment_cols(glycounter_data())
+
       skyline_prepped <- prepare_skyline_data(
         skyline_data(), input$mz_tolerance_ppm
       )
-      glycounter_candidates <- extract_glycounter_candidates(
-        skyline_prepped, glycounter_data()
+
+      skyline_isotope_candidates <- expand_skyline_isotope_candidates(
+        skyline_prepped = skyline_prepped,
+        isotope_mz_candidates = isotope_mz_candidates()
       )
+
+      glycounter_candidates <- extract_glycounter_candidates(
+        skyline_isotope_candidates = skyline_isotope_candidates,
+        glycounter_data = glycounter_data()
+      )
+
       glycounter_summary <- summarize_glycounter_data(
         glycounter_candidates, fragment_cols
       )
+
       merge_data(skyline_prepped, glycounter_summary)
     })
 
