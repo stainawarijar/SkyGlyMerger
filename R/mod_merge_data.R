@@ -117,7 +117,7 @@ mod_merge_data_server <- function(id) {
 
     merged_data <- reactive({
       req(skyline_data(), isotope_mz_candidates(), glycounter_data())
-      browser()
+
       fragment_cols <- extract_fragment_cols(glycounter_data())
 
       skyline_prepped <- prepare_skyline_data(
