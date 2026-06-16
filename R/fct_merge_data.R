@@ -2,7 +2,17 @@
 # It also calls functions in `fct_isotopes.R`
 
 
-# TODO: documentation
+#' Read a Skyline-exported CSV file
+#'
+#' @description
+#' Reads a Skyline CSV export, automatically detecting whether the file uses a
+#' semicolon or comma as delimiter by inspecting the first line.
+#'
+#' @param file_path A character string with the path to the CSV file.
+#'
+#' @return A data frame containing the raw Skyline export data.
+#'
+#' @noRd
 read_skyline_csv <- function(file_path) {
   if (grepl(";", readLines(file_path, n = 1))) {
     read.csv(file_path, header = TRUE, sep = ";")
@@ -13,7 +23,20 @@ read_skyline_csv <- function(file_path) {
 }
 
 
-# TODO: documentation
+#' Disambiguate isomeric glycan compositions in Skyline data
+#'
+#' @description
+#' Detects glycan isomers — rows that share the same `Protein.Name`,
+#' `Peptide`, `Precursor`, and `Precursor.Charge` — and appends a letter suffix
+#' (`_a`, `_b`, ...) to the `Peptide` column to make each isomer uniquely
+#' identifiable. Rows with unique compositions are left unchanged.
+#'
+#' @param data_raw A data frame as returned by [read_skyline_csv()].
+#'
+#' @return A data frame identical in structure to `data_raw`, with the
+#'   `Peptide` column updated for isomeric entries.
+#'
+#' @noRd
 rename_skyline_isomers <- function(
     data_raw
     # TODO Adjustable column names for Protein Name, Charge etc
@@ -65,7 +88,25 @@ rename_skyline_isomers <- function(
 
 
 
-# TODO: documentation
+#' Transform wide Skyline data into a tidy analyte-sample format
+#'
+#' @description
+#' Reshapes a wide-format Skyline data frame (one row per analyte, one column
+#' group per sample-variable combination) into a tidy format with one row per
+#' analyte-sample combination and one column per measurement variable.
+#'
+#' Sample-variable columns are assumed to start immediately after
+#' `Precursor.Charge` and follow the naming convention `<SampleID>.<Variable>`,
+#' where `<Variable>` is one of `Best.Retention.Time`, `Total.Area.MS1`,
+#' `Isotope.Dot.Product`, `Average.Mass.Error.PPM`, `Normalized.Area`,
+#' `Min.Start.Time`, or `Max.End.Time`.
+#'
+#' @param data_renamed A data frame as returned by [rename_skyline_isomers()].
+#'
+#' @return A data frame with one row per analyte-sample combination and
+#'   individual columns for each Skyline measurement variable.
+#'
+#' @noRd
 # TODO: Adjustable column names for Precursor.Charge etc...
 transform_skyline_data <- function(data_renamed) {
   # Assume variable columns for samples start after `Precursor.Charge`
@@ -129,7 +170,19 @@ transform_skyline_data <- function(data_renamed) {
 }
 
 
-# TODO: documentation
+#' Load and process a Skyline CSV export
+#'
+#' @description
+#' Convenience wrapper that reads a Skyline CSV file, disambiguates isomeric
+#' glycan compositions, and reshapes the data into a tidy analyte-sample format
+#' by calling [read_skyline_csv()], [rename_skyline_isomers()], and
+#' [transform_skyline_data()] in sequence.
+#'
+#' @param file_path A character string with the path to the Skyline CSV file.
+#'
+#' @return A tidy data frame with one row per analyte-sample combination.
+#'
+#' @noRd
 load_skyline_data <- function(file_path) {
   data_raw <- read_skyline_csv(file_path)
   data_renamed <- rename_skyline_isomers(data_raw)
@@ -138,7 +191,28 @@ load_skyline_data <- function(file_path) {
 }
 
 
-# TODO: documentation
+#' Calculate isotopic patterns for all analytes in a Skyline dataset
+#'
+#' @description
+#' Extracts all unique molecular formula and charge state combinations from the
+#' Skyline data and computes the nominal isotopic pattern (M, M+1, M+2, ...) for
+#' each ion using [calculate_ion_fine_structure()] and
+#' [collapse_to_nominal_pattern()].
+#'
+#' @param skyline_data A data frame containing at least the molecular formula
+#'   and precursor charge columns.
+#' @param molecular_formula_col A character string with the name of the column
+#'   containing molecular formulas. Default is `"Molecule.Formula"`.
+#' @param charge_col A character string with the name of the column containing
+#'   precursor charge states. Default is `"Precursor.Charge"`.
+#' @param charge_carrier A character string with the element symbol used as the
+#'   charge carrier. Default is `"H"`.
+#'
+#' @return A nested named list: `patterns[[formula]][[charge]]` holds the
+#'   nominal isotopic pattern (as returned by [collapse_to_nominal_pattern()])
+#'   for the ion with that formula and charge state.
+#'
+#' @noRd
 calculate_skyline_isotopic_patterns <- function(
     skyline_data,
     molecular_formula_col = "Molecule.Formula",
@@ -174,7 +248,27 @@ calculate_skyline_isotopic_patterns <- function(
 
 
 
-# TODO: Documentation
+#' Extract the top-n most probable isotope m/z values
+#'
+#' @description
+#' For each unique molecular formula and charge state combination in the
+#' isotopic pattern list, selects the `n_peaks` most probable nominal isotope
+#' peaks and returns their m/z values in wide format with one column per rank.
+#'
+#' @param isotopic_patterns A nested named list as returned by
+#'   [calculate_skyline_isotopic_patterns()].
+#' @param n_peaks An integer giving the number of top peaks to extract per
+#'   formula-charge combination. Default is `3`.
+#' @param molecular_formula_col A character string with the name to use for the
+#'   molecular formula column in the output. Default is `"Molecule.Formula"`.
+#' @param charge_col A character string with the name to use for the charge
+#'   column in the output. Default is `"Precursor.Charge"`.
+#'
+#' @return A data frame with one row per formula-charge combination and columns
+#'   `mz_prob1`, `mz_prob2`, ... for the m/z values of the top isotope peaks
+#'   in descending probability order.
+#'
+#' @noRd
 extract_top_isotopic_mz <- function(
     isotopic_patterns,
     n_peaks = 3,
@@ -217,7 +311,31 @@ extract_top_isotopic_mz <- function(
 
 
 
-# TODO: Documentation
+#' Extract isotope m/z candidates with optional probability filtering
+#'
+#' @description
+#' Extracts nominal isotope peaks from the isotopic pattern list, optionally
+#' filters by minimum relative probability, and returns the top `n_peaks` peaks
+#' per formula-charge combination in long format (one row per peak).
+#'
+#' @param isotopic_patterns A nested named list as returned by
+#'   [calculate_skyline_isotopic_patterns()].
+#' @param n_peaks An integer giving the maximum number of candidate peaks to
+#'   retain per formula-charge combination. Default is `3`.
+#' @param min_relative_prob A numeric value between 0 and 1. Peaks with a
+#'   relative probability below this threshold are excluded before applying
+#'   `n_peaks`. Set to `NULL` (default) to skip filtering.
+#' @param molecular_formula_col A character string with the name to use for the
+#'   molecular formula column in the output. Default is `"Molecule.Formula"`.
+#' @param charge_col A character string with the name to use for the charge
+#'   column in the output. Default is `"Precursor.Charge"`.
+#'
+#' @return A data frame with one row per formula-charge-isotope combination,
+#'   containing columns `isotope_rank`, `isotope_group`, `extra_neutrons`,
+#'   `isotope_mz`, `isotope_prob`, `isotope_prob_relative`, and
+#'   `n_fine_structure_peaks`.
+#'
+#' @noRd
 extract_isotopic_mz_candidates <- function(
     isotopic_patterns,
     n_peaks = 3,
@@ -277,7 +395,29 @@ extract_isotopic_mz_candidates <- function(
 
 
 
-# TODO: Documentation
+#' Join Skyline data with isotope m/z candidates and compute m/z windows
+#'
+#' @description
+#' Performs a many-to-many left join between the prepared Skyline data and the
+#' isotope m/z candidates on molecular formula and charge state, then computes
+#' lower and upper m/z bounds for each candidate using the `ppm_tolerance`
+#' column already present in `skyline_prepped`.
+#'
+#' @param skyline_prepped A data frame as returned by [prepare_skyline_data()],
+#'   including a `ppm_tolerance` column.
+#' @param isotope_mz_candidates A data frame as returned by
+#'   [extract_isotopic_mz_candidates()].
+#' @param molecular_formula_col A character string with the name of the
+#'   molecular formula column shared between the two inputs. Default is
+#'   `"Molecule.Formula"`.
+#' @param charge_col A character string with the name of the charge column
+#'   shared between the two inputs. Default is `"Precursor.Charge"`.
+#'
+#' @return A data frame combining `skyline_prepped` and `isotope_mz_candidates`,
+#'   with additional columns `isotope_mz_min` and `isotope_mz_max` representing
+#'   the m/z search window for each candidate.
+#'
+#' @noRd
 expand_skyline_isotope_candidates <- function(
     skyline_prepped,
     isotope_mz_candidates,
@@ -298,9 +438,24 @@ expand_skyline_isotope_candidates <- function(
 
 
 
-# TODO: documentation
-# `files`: named list containing original filenames (names) and those stored
-# in memory (values)
+#' Load and process GlyCounter output files
+#'
+#' @description
+#' Reads one or more GlyCounter output files, selects relevant columns, and
+#' combines them into a single data frame. Sample names are recovered from the
+#' original filenames by stripping the `_GlyCounter` suffix and everything that
+#' follows.
+#'
+#' @param files A named list where names are the original filenames and values
+#'   are the corresponding file paths in memory (e.g. as returned by a Shiny
+#'   file input).
+#'
+#' @return A data frame with one row per MS2 scan across all input files,
+#'   containing columns `sample`, `ScanNumber`, `RetentionTime`, `PrecursorMZ`,
+#'   `LikelyGlycoSpectrum`, `DissociationType`, `fragment_sum`, and individual
+#'   fragment ion intensity columns (named as `"<mz>, <annotation>"`).
+#'
+#' @noRd
 load_glycounter_data <- function(files) {
   # Read and process all OxoSignal files
   purrr::imap_dfr(files, function(file, name) {
@@ -338,7 +493,18 @@ load_glycounter_data <- function(files) {
 }
 
 
-# TODO: documentation
+#' Extract fragment ion column names from GlyCounter data
+#'
+#' @description
+#' Identifies and returns the names of fragment ion intensity columns in a
+#' GlyCounter data frame. These columns follow the naming pattern
+#' `"<m/z>, <annotation>"` (e.g. `"204.0867, HexNAc"`).
+#'
+#' @param glycounter_data A data frame as returned by [load_glycounter_data()].
+#'
+#' @return A character vector of fragment ion column names.
+#'
+#' @noRd
 extract_fragment_cols <- function(glycounter_data) {
   names <- colnames(glycounter_data)
   fragment_cols <- names[stringr::str_detect(names, "^\\d+\\.\\d+,\\s")]
@@ -346,7 +512,25 @@ extract_fragment_cols <- function(glycounter_data) {
 }
 
 
-# TODO: documentation
+#' Prepare Skyline data for merging with GlyCounter data
+#'
+#' @description
+#' Adds a stable row identifier (`skyline_row_id`), a `ppm_tolerance` column,
+#' and coerces the precursor charge column to integer. These additions are
+#' required by downstream matching functions.
+#'
+#' @param skyline_data A data frame as returned by [load_skyline_data()].
+#' @param ppm_tolerance A numeric value specifying the mass accuracy window in
+#'   parts per million used for matching GlyCounter precursor m/z values to
+#'   isotope candidates. Default is `10`.
+#' @param charge_col A character string with the name of the precursor charge
+#'   column. Default is `"Precursor.Charge"`.
+#'
+#' @return A data frame identical to `skyline_data` with additional columns
+#'   `skyline_row_id` (integer row index) and `ppm_tolerance`, and with the
+#'   charge column coerced to integer.
+#'
+#' @noRd
 prepare_skyline_data <- function(
     skyline_data,
     ppm_tolerance = 10,
@@ -365,7 +549,25 @@ prepare_skyline_data <- function(
 
 
 
-# TODO: documentation
+#' Filter GlyCounter scans to isotope m/z and retention time windows
+#'
+#' @description
+#' Joins the expanded Skyline isotope candidate table with the GlyCounter
+#' scan-level data on sample, then filters to scans whose precursor m/z falls
+#' within the isotope m/z window and whose retention time falls within the
+#' Skyline peak boundaries. When multiple isotope candidates match the same
+#' scan, only the best (lowest m/z error) match is retained.
+#'
+#' @param skyline_isotope_candidates A data frame as returned by
+#'   [expand_skyline_isotope_candidates()].
+#' @param glycounter_data A data frame as returned by [load_glycounter_data()].
+#'
+#' @return A filtered data frame with one row per unique
+#'   `(skyline_row_id, sample, ScanNumber)` combination, containing both
+#'   Skyline isotope candidate columns and GlyCounter scan-level columns, plus a
+#'   `glycounter_mz_error_ppm` column.
+#'
+#' @noRd
 extract_glycounter_candidates <- function(
     skyline_isotope_candidates,
     glycounter_data
@@ -411,7 +613,29 @@ extract_glycounter_candidates <- function(
 
 
 
-# TODO: documentation
+#' Summarize GlyCounter scan data per Skyline row
+#'
+#' @description
+#' Aggregates the scan-level GlyCounter candidate data to produce one summary
+#' row per Skyline analyte-sample combination (`skyline_row_id`). Summaries
+#' include scan counts, retention time statistics, precursor m/z statistics,
+#' matched isotope metadata, and total fragment ion intensities. Optionally
+#' converts fragment intensities to relative abundances (percentage of total
+#' fragment signal per Skyline row).
+#'
+#' @param glycounter_candidates A data frame as returned by
+#'   [extract_glycounter_candidates()].
+#' @param fragment_cols A character vector of fragment ion column names as
+#'   returned by [extract_fragment_cols()].
+#' @param relative_abundances Logical. If `TRUE` (default), fragment ion
+#'   intensities are converted to percentages of `fragment_sum` for each
+#'   Skyline row.
+#'
+#' @return A data frame with one row per `skyline_row_id`, containing
+#'   aggregated GlyCounter metrics and fragment ion intensities (or relative
+#'   abundances when `relative_abundances = TRUE`).
+#'
+#' @noRd
 summarize_glycounter_data <- function(
     glycounter_candidates,
     fragment_cols,
@@ -502,7 +726,23 @@ summarize_glycounter_data <- function(
 
 
 
-# TODO: documentation
+#' Merge Skyline and GlyCounter summary data
+#'
+#' @description
+#' Left-joins the GlyCounter summary onto the full prepared Skyline table,
+#' matching on `skyline_row_id`. Because the join starts from the Skyline table,
+#' the number of output rows is identical to the number of rows in
+#' `skyline_prepped`. Helper columns added by [prepare_skyline_data()]
+#' (`skyline_row_id`, `ppm_tolerance`) are removed from the output.
+#'
+#' @param skyline_prepped A data frame as returned by [prepare_skyline_data()].
+#' @param glycounter_summary A data frame as returned by
+#'   [summarize_glycounter_data()].
+#'
+#' @return A data frame with all Skyline analyte-sample columns plus the
+#'   GlyCounter summary columns for matched rows (`NA` for unmatched rows).
+#'
+#' @noRd
 merge_data <- function(
     skyline_prepped,
     glycounter_summary

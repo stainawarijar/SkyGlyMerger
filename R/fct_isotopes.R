@@ -7,7 +7,14 @@
 
 
 
-# Returns full name of an element based on symbol.
+#' Convert an element symbol to its full element name
+#'
+#' @param symbol A character string with the element symbol (e.g. `"C"`, `"H"`,
+#'   `"Na"`).
+#'
+#' @return A character string with the full element name (e.g. `"carbon"`).
+#'
+#' @noRd
 symbol_to_element <- function(symbol) {
 
   symbol_element_map <- list(
@@ -26,8 +33,19 @@ symbol_to_element <- function(symbol) {
 
 
 
-# Converts a molecular formula in character format to a dictionary.
-# Example: "C6H12O6" is converted to `list("C" = 6, "H" = 12, "O" = 6)`
+#' Parse a molecular formula string into a named list
+#'
+#' @description
+#' Converts a molecular formula string (e.g. `"C6H12O6"`) into a named list
+#' with element symbols as names and integer atom counts as values.
+#' Example: `"C6H12O6"` becomes `list(C = 6, H = 12, O = 6)`.
+#'
+#' @param formula A character string representing a molecular formula.
+#'
+#' @return A named list where each name is an element symbol and each value is
+#'   an integer atom count.
+#'
+#' @noRd
 parse_molecular_formula <- function(formula) {
   composition <- list()
 
@@ -58,10 +76,20 @@ parse_molecular_formula <- function(formula) {
 
 
 
-# Generate all ways to distribute n identical atoms over k isotopes.
-# Example: n = 2, k = 3 gives combinations:
-# (2, 0, 0), (1, 1, 0), (1, 0, 1), ..., (0, 0, 2)
-# This example applies to 2 oxygen atoms, which has 3 stable isotopes.
+#' Generate all isotope count combinations
+#'
+#' @description
+#' Generates all non-negative integer vectors of length `k` that sum to `n`.
+#' These represent every way to distribute `n` identical atoms over `k`
+#' isotopes. For example, `n = 2, k = 3` (two oxygen atoms with 3 stable
+#' isotopes) produces `(2,0,0)`, `(1,1,0)`, `(0,0,2)`, etc.
+#'
+#' @param n Integer. Total number of atoms to distribute.
+#' @param k Integer. Number of isotopes.
+#'
+#' @return A list of integer vectors of length `k`, each summing to `n`.
+#'
+#' @noRd
 isotope_count_combis <- function(n, k) {
   if (k == 1) {
     # Base case: only one isotope.
@@ -91,12 +119,23 @@ isotope_count_combis <- function(n, k) {
 
 
 
-# Calculate the multinomial probability for isotope counts.
-# For example, for carbon with counts (5, 1):
-# probability = 6! / (5! 1!) * P(C12)^5 * P(C13)^1
-#
-# This is done in log-space, because direct factorials and products can become
-# numerically unstable for larger molecules.
+#' Calculate the multinomial probability for a set of isotope counts
+#'
+#' @description
+#' Computes the multinomial probability for a given set of isotope counts and
+#' their natural abundances. For example, for carbon with counts `(5, 1)`:
+#' `probability = 6! / (5! * 1!) * P(C12)^5 * P(C13)^1`.
+#' Computation is performed in log-space for numerical stability with large
+#' molecules.
+#'
+#' @param counts A numeric vector of isotope atom counts summing to the total
+#'   number of atoms for the element.
+#' @param probs A numeric vector of natural abundance probabilities for each
+#'   isotope, in the same order as `counts`.
+#'
+#' @return A single numeric value: the multinomial probability.
+#'
+#' @noRd
 multinomial_prob <- function(counts, probs) {
   total <- sum(counts)
 
@@ -117,8 +156,31 @@ multinomial_prob <- function(counts, probs) {
 
 
 
-# Calculate the isotopic fine structure for a single element.
-element_fine_structure <- function(symbol, atom_count, min_prob) {
+#' Calculate the isotopic fine structure for a single element
+#'
+#' @description
+#' Computes all isotope peaks for a given element and atom count by evaluating
+#' every combination of isotopes. Peaks with probability below `min_prob` are
+#' skipped to reduce computation.
+#'
+#' @param symbol A character string with the element symbol (e.g. `"C"`).
+#' @param atom_count An integer giving the number of atoms of this element.
+#' @param min_prob A numeric threshold. Peaks with probability at or below this
+#'   value are excluded.
+#'
+#' @return A list of peaks. Each peak is a named list with:
+#'   \describe{
+#'     \item{mass}{The exact mass of the peak.}
+#'     \item{prob}{The probability of the peak.}
+#'     \item{isotope_counts}{A named integer vector of non-zero isotope counts.}
+#'   }
+#'
+#' @noRd
+element_fine_structure <- function(
+    symbol,
+    atom_count,
+    min_prob = 1e-12
+  ) {
 
   element <- symbol_to_element(symbol)
   isotope_data <- ISOTOPES[[element]]
@@ -156,10 +218,28 @@ element_fine_structure <- function(symbol, atom_count, min_prob) {
 
 
 
-# Combine two isotope patterns.
-# Every peak from pattern_a is combined with every peak from pattern_b.
-# The masses add and the probabilities multiply.
-convolve_patterns <- function(pattern_a, pattern_b, min_prob) {
+#' Convolve two isotope patterns
+#'
+#' @description
+#' Combines two isotope peak lists by convolving them: every peak from
+#' `pattern_a` is paired with every peak from `pattern_b`. Resulting peak
+#' masses are summed and probabilities are multiplied. Pairs whose combined
+#' probability falls below `min_prob` are discarded.
+#'
+#' @param pattern_a A list of isotope peaks (each a named list with `mass`,
+#'   `prob`, and `isotope_counts`).
+#' @param pattern_b A list of isotope peaks in the same format as `pattern_a`.
+#' @param min_prob A numeric threshold. Combined peaks with probability below
+#'   this value are excluded.
+#'
+#' @return A list of combined isotope peaks in the same format as the inputs.
+#'
+#' @noRd
+convolve_patterns <- function(
+    pattern_a,
+    pattern_b,
+    min_prob = 1e-12
+  ) {
   combined_pattern <- list()
   peak_index <- 1
 
@@ -208,10 +288,29 @@ convolve_patterns <- function(pattern_a, pattern_b, min_prob) {
 
 
 
+#' Calculate the isotopic fine structure for a molecular formula
+#'
+#' @description
+#' Computes the full isotopic fine structure for a molecule by successively
+#' convolving the elemental fine-structure patterns for every element in the
+#' formula. Corrects for electron mass based on the charge state. The resulting
+#' peaks are sorted by mass and annotated with relative probabilities.
+#'
+#' @param formula A character string with the molecular formula (e.g.
+#'   `"C40H68N2O20"`).
+#' @param charge An integer giving the charge state (positive for cations,
+#'   negative for anions).
+#' @param min_prob A numeric probability threshold. Peaks below this value are
+#'   excluded at each convolution step.
+#'
+#' @return A list of fine-structure peaks sorted by mass. Each peak is a named
+#'   list with `mass`, `prob`, `isotope_counts`, and `relative_prob`.
+#'
+#' @noRd
 calculate_fine_structure <- function(
     formula,
     charge,
-    min_prob=1e-12
+    min_prob = 1e-12
 ) {
 
   # Determine elemental composition
@@ -270,7 +369,29 @@ calculate_fine_structure <- function(
 
 
 
-# Collapse fine structure to nominal pattern.
+#' Collapse fine structure to a nominal isotope pattern
+#'
+#' @description
+#' Groups fine-structure peaks by the number of extra neutrons relative to the
+#' monoisotopic peak (M, M+1, M+2, ...) and collapses each group into a single
+#' nominal peak. The mass of each group is the probability-weighted average of
+#' all contributing fine-structure peaks.
+#'
+#' @param fine_structure_pattern A list of fine-structure peaks as returned by
+#'   [calculate_fine_structure()] or [calculate_ion_fine_structure()].
+#'
+#' @return A named list of nominal isotope peaks sorted by `extra_neutrons`.
+#'   Each entry is a named list with:
+#'   \describe{
+#'     \item{isotope_group}{Group label, e.g. `"M"` or `"M+1"`.}
+#'     \item{extra_neutrons}{Integer number of extra neutrons relative to M.}
+#'     \item{prob}{Summed probability of all fine-structure peaks in the group.}
+#'     \item{mass}{Probability-weighted average mass of the group.}
+#'     \item{prob_relative}{Probability relative to the most probable group.}
+#'     \item{n_fine_structure_peaks}{Number of fine-structure peaks in the group.}
+#'   }
+#'
+#' @noRd
 collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 
   grouped_pattern <- list()
@@ -357,13 +478,29 @@ collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 
 
 
-# Calculate the fine structure for an ion.
-# This function adds charge carrier to the molecular formula,
-# so the molecular formula is assumed to be for the neutral molecule.
+#' Calculate the isotopic fine structure for an ion
+#'
+#' @description
+#' Computes the isotopic fine structure for an ionised molecule by appending
+#' charge-carrier atoms to the neutral molecular formula before calling
+#' [calculate_fine_structure()]. The `formula` argument is assumed to represent
+#' the neutral (uncharged) molecule.
+#'
+#' @param formula A character string with the neutral molecular formula (e.g.
+#'   `"C40H68N2O20"`).
+#' @param charge An integer giving the charge state. May be positive or
+#'   negative.
+#' @param carrier A character string with the element symbol of the charge
+#'   carrier. Default is `"H"` (proton adduct).
+#'
+#' @return A list of fine-structure peaks as returned by
+#'   [calculate_fine_structure()].
+#'
+#' @noRd
 calculate_ion_fine_structure <- function(
-    formula,  # Molecular formula (elemental composition)
-    charge,  # Integer, may be positive or negative
-    carrier = "H"  # Fix to hydrogen for now
+    formula,
+    charge,
+    carrier = "H"
 ) {
   # Add charge carrier to the molecular formula
   charge_composition <- paste0(carrier, as.integer(charge))
