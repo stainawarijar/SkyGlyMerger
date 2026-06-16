@@ -44,6 +44,11 @@ mod_merge_data_ui <- function(id) {
             ),
             value = 10, min = 1, step = 1
           ),
+          numericInput(
+            ns("n_isotopic_peaks"),
+            "Number of theoretical isotopic peaks to use for matching",
+            value = 3, min = 1, step = 1
+          ),
           actionButton(ns("merge_data"), "Merge data")
         ),
         # Box for displaying and downloading the data
@@ -92,7 +97,7 @@ mod_merge_data_server <- function(id) {
       req(isotopic_patterns())
       extract_isotopic_mz_candidates(
         isotopic_patterns = isotopic_patterns(),
-        n_peaks = 3,
+        n_peaks = input$n_isotopic_peaks,
         min_relative_prob = 0.05
       )
     })
