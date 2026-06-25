@@ -76,6 +76,109 @@ parse_molecular_formula <- function(formula) {
 
 
 
+#' Convert a named composition list to a molecular formula string
+#'
+#' @description
+#' The inverse of [parse_molecular_formula()]. Converts a named list of element
+#' symbols and atom counts (e.g. `list(C = 6, H = 12, O = 6)`) back into a
+#' molecular formula string (e.g. `"C6H12O6"`). Elements with a count of 0 are
+#' omitted; elements with a count of 1 are written without a number.
+#'
+#' @param composition A named list where each name is an element symbol and each
+#'   value is a non-negative integer atom count.
+#'
+#' @return A character string containing the molecular formula.
+#'
+#' @noRd
+composition_to_formula <- function(composition) {
+  formula_parts <- character(0)
+
+  for (symbol in names(composition)) {
+    count <- composition[[symbol]]
+
+    if (count < 0) {
+      stop("Negative atom count for ", symbol, ": ", count)
+    }
+
+    if (count == 0) {
+      next
+    }
+
+    if (count == 1) {
+      formula_parts <- c(formula_parts, symbol)
+    }
+    else {
+      formula_parts <- c(formula_parts, paste0(symbol, count))
+    }
+  }
+
+  paste0(formula_parts, collapse = "")
+}
+
+
+
+#' Apply a charge carrier to a molecular formula
+#'
+#' @description
+#' Modifies a molecular formula by adding or removing charge-carrier atoms to
+#' represent the ionised form of a molecule. For a positive charge, `abs(charge)`
+#' carrier atoms are added; for a negative charge, they are removed. Stops with
+#' an error if the formula does not contain enough carrier atoms for removal.
+#'
+#' @param formula A character string with the neutral molecular formula.
+#' @param charge An integer giving the charge state (positive for cations,
+#'   negative for anions). Must be non-zero.
+#' @param carrier A character string with the element symbol of the charge
+#'   carrier. Default is `"H"` (proton adduct).
+#'
+#' @return A character string containing the modified molecular formula.
+#'
+#' @noRd
+apply_charge_carrier <- function(
+    formula,
+    charge,
+    carrier = "H"
+) {
+  if (charge == 0) {
+    stop("Charge must be non-zero.")
+  }
+
+  composition <- parse_molecular_formula(formula)
+  carrier_count <- abs(as.integer(charge))
+
+  if (charge > 0) {
+    if (is.null(composition[[carrier]])) {
+      composition[[carrier]] <- carrier_count
+    }
+    else {
+      composition[[carrier]] <- composition[[carrier]] + carrier_count
+    }
+  }
+  else {
+    if (is.null(composition[[carrier]])) {
+      current_count <- 0L
+    }
+    else {
+      current_count <- composition[[carrier]]
+    }
+
+    if (current_count < carrier_count) {
+      stop(
+        "Cannot remove ", carrier_count, " ", carrier,
+        " atoms from formula ", formula,
+        "; only ", current_count, " present."
+      )
+    }
+
+    composition[[carrier]] <- current_count - carrier_count
+  }
+
+  composition_to_formula(composition)
+}
+
+
+
+
 #' Generate all isotope count combinations
 #'
 #' @description
@@ -199,7 +302,7 @@ element_fine_structure <- function(
     prob = multinomial_prob(counts, isotope_probs)
 
     # Skip masses with very low probabilities, to reduce computation.
-    if (prob <= min_prob) {
+    if (prob < min_prob) {
       next
     }
 
@@ -481,10 +584,11 @@ collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 #' Calculate the isotopic fine structure for an ion
 #'
 #' @description
-#' Computes the isotopic fine structure for an ionised molecule by appending
-#' charge-carrier atoms to the neutral molecular formula before calling
-#' [calculate_fine_structure()]. The `formula` argument is assumed to represent
-#' the neutral (uncharged) molecule.
+#' Computes the isotopic fine structure for an ionised molecule by modifying
+#' the neutral molecular formula according to the charge carrier before calling
+#' [calculate_fine_structure()]. For positive charge, carrier atoms are added.
+#' For negative charge, carrier atoms are removed. The `formula` argument is
+#' assumed to represent the neutral molecule.
 #'
 #' @param formula A character string with the neutral molecular formula (e.g.
 #'   `"C40H68N2O20"`).
@@ -500,18 +604,17 @@ collapse_to_nominal_pattern <- function(fine_structure_pattern) {
 calculate_ion_fine_structure <- function(
     formula,
     charge,
-    carrier = "H"
+    carrier = "H",
+    min_prob = 1e-12
 ) {
-  # Add charge carrier to the molecular formula
-  charge_composition <- paste0(carrier, as.integer(charge))
-  formula_incl_charge <- paste0(formula, charge_composition)
-
-  # Get fine structure pattern for formula including charge carrier.
-  ion_fine_pattern <- calculate_fine_structure(
-    formula_incl_charge, charge = charge
+  calculate_fine_structure(
+    formula = apply_charge_carrier(
+      formula = formula,
+      charge = charge,
+      carrier = carrier
+    ),
+    charge = charge,
+    min_prob = min_prob
   )
-
-  return(ion_fine_pattern)
 }
-
 
