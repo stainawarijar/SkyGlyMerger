@@ -268,7 +268,7 @@ multinomial_prob <- function(counts, probs) {
 #'
 #' @param symbol A character string with the element symbol (e.g. `"C"`).
 #' @param atom_count An integer giving the number of atoms of this element.
-#' @param min_prob A numeric threshold. Peaks with probability at or below this
+#' @param min_prob A numeric threshold. Peaks with probability below this
 #'   value are excluded.
 #'
 #' @return A list of peaks. Each peak is a named list with:
@@ -434,6 +434,10 @@ calculate_fine_structure <- function(
     molecular_pattern <- convolve_patterns(
       molecular_pattern, element_pattern, min_prob
     )
+
+    if (length(molecular_pattern) == 0) {
+      return(list())
+    }
   }
 
   # Correct for electron masses based on charge state.
